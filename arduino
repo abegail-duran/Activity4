@@ -1,0 +1,78 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <time.h>
+
+const char* ssid = "PESONETINABBY";
+const char* password = "asdfghjkl";
+
+const char* firestoreUrl = "https://firestore.googleapis.com/v1/projects/fir-abby-6e255/databases/(default)/documents/sensord?key=AIzaSyBJ8tP3h_mTYNtfO-OdnlQyZuyByKeTIgI";
+
+const char* ntpServer = "time.google.com";
+const long gmtOffset_sec = 8 * 3600; // GMT+8 for Philippines
+const int daylightOffset_sec = 0;
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(1000);
+  }
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.println("\nConnected to Wi-Fi");
+
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    // Get current time
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo)) {
+      Serial.println("Failed to obtain time");
+      return;
+    }
+    
+    char timestamp[30];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+
+    // Prepare HTTP client
+    HTTPClient http;
+    http.begin(firestoreUrl);
+    http.addHeader("Content-Type", "application/json");
+
+    
+    String jsonData = String(R"(
+      {
+        "fields": {
+          "temperature": {"stringValue": "25.5"},
+          "humidity": {"stringValue": "60"},
+          "light_level": {"stringValue": "21"},
+          "timestamp": {"stringValue": ")") + timestamp + R"("}
+        }
+      }
+    )";
+
+    
+    int httpResponseCode = http.POST(jsonData);
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+
+    // Print response for debugging
+    if (httpResponseCode > 0) {
+      String response = http.getString();
+      Serial.println("Response: " + response);
+    } else {
+      Serial.println("Error: " + http.errorToString(httpResponseCode));
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi disconnected. Reconnecting...");
+    WiFi.begin(ssid, password);
+  }
+
+  delay(5000); 
+
+
+}
